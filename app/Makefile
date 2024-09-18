@@ -1,180 +1,78 @@
+MAIN_DIR = app
+START_UP_DIR = ../Startup
+SRC_DIR = src
+INC_DIR = inc
+OPENCM3_DIR = ../libopencm3
+LIBNAME = opencm3_stm32f1
 
-# Be silent per default, but 'make V=1' will show all compiler calls.
-ifneq ($(V),1)
-Q		:= @
-NULL		:= 2>/dev/null
-endif
+OBJ_DIR = Objects
+BUILD_DIR = Build
 
-SRC_DIR        = src
-INC_DIR        = inc
-OPENCM3_DIR    = ../libopencm3
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
 
-BINARY = firmware
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
-###############################################################################
-# Basic Device Setup
+# Source and object files
+SOURCES  = ${SRC_DIR}/main.c     
+SOURCES += ${START_UP_DIR}/startup_stm32f103c8tx.s
+SOURCES += $(filter-out ${SRC_DIR}/main.c, $(wildcard ${SRC_DIR}/*.c)) 
+OBJS = $(patsubst %.c, $(OBJ_DIR)/%.o, $(patsubst %.s, $(OBJ_DIR)/%.o, $(notdir $(SOURCES))))
 
-LIBNAME			= opencm3_stm32f1
-DEFS				+= -DSTM32F1
-ARCH_FLAGS = -mthumb -mcpu=cortex-m3
+# Name for output binary files
+PROJECT ?= main
 
-###############################################################################
-# Linkerscript
+# Compiler, objcopy (should be in PATH)
+CC = arm-none-eabi-gcc
+OBJCOPY = arm-none-eabi-objcopy
 
-LDSCRIPT = linkerscript.ld
-LDLIBS		+= -l$(LIBNAME)
-LDFLAGS		+= -L$(OPENCM3_DIR)/lib
+# Path to st-flash (or should be specified in PATH)
+ST_FLASH ?= /usr/bin/st-flash
 
-###############################################################################
-# Includes
+# Specify compiler flags
+CFLAGS  = -g -O2 -Wall
+CFLAGS += -T../STM32F103C8TX_FLASH.ld
+CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mthumb-interwork
+CFLAGS += -DSTM32F1                   
+CFLAGS += -I$(INC_DIR)
+CFLAGS += -I$(OPENCM3_DIR)/include
+CFLAGS += -Wl,--gc-sections
 
-DEFS		+= -I$(OPENCM3_DIR)/include
-DEFS		+= -I$(INC_DIR)
-DEFS		+= -I$(SHARED_INC_DIR)
+# Linker and library flags
+LDLIBS += -l$(LIBNAME)
+LDFLAGS += -L$(OPENCM3_DIR)/lib
 
-###############################################################################
-# Executables
+FL_ADDR ?= 0x8000000
 
-PREFIX		?= arm-none-eabi-
+vpath %.c $(SRC_DIR)
+vpath %.s $(START_UP_DIR)
 
-CC		:= $(PREFIX)gcc
-CXX		:= $(PREFIX)g++
-LD		:= $(PREFIX)gcc
-AR		:= $(PREFIX)ar
-AS		:= $(PREFIX)as
-OBJCOPY		:= $(PREFIX)objcopy
-OBJDUMP		:= $(PREFIX)objdump
-GDB		:= $(PREFIX)gdb
-STFLASH		= $(shell which st-flash)
-OPT		:= -Os
-DEBUG		:= -ggdb3
-CSTD		?= -std=c99
+build: $(BUILD_DIR)/$(PROJECT).elf
 
+# Compile and link
+$(BUILD_DIR)/$(PROJECT).elf: $(OBJ_DIR) $(BUILD_DIR) $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDLIBS) -o $@
+	$(OBJCOPY) -O ihex $(BUILD_DIR)/$(PROJECT).elf $(BUILD_DIR)/$(PROJECT).hex
+	$(OBJCOPY) -O binary $(BUILD_DIR)/$(PROJECT).elf $(BUILD_DIR)/$(PROJECT).bin
 
-###############################################################################
-# Source files
+$(OBJ_DIR)/%.o: $(START_UP_DIR)/%.s
+	$(CC) $(CFLAGS) -c $< -o $@
 
-OBJS		+= $(SRC_DIR)/$(BINARY).o
+# Create object files for C source files
+$(OBJ_DIR)/%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 
-###############################################################################
-# C flags
-
-TGT_CFLAGS	+= $(OPT) $(CSTD) $(DEBUG)
-TGT_CFLAGS	+= $(ARCH_FLAGS)
-TGT_CFLAGS	+= -Wextra -Wshadow -Wimplicit-function-declaration
-TGT_CFLAGS	+= -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes
-TGT_CFLAGS	+= -fno-common -ffunction-sections -fdata-sections
-
-###############################################################################
-# C++ flags
-
-TGT_CXXFLAGS	+= $(OPT) $(CXXSTD) $(DEBUG)
-TGT_CXXFLAGS	+= $(ARCH_FLAGS)
-TGT_CXXFLAGS	+= -Wextra -Wshadow -Wredundant-decls  -Weffc++
-TGT_CXXFLAGS	+= -fno-common -ffunction-sections -fdata-sections
-
-###############################################################################
-# C & C++ preprocessor common flags
-
-TGT_CPPFLAGS	+= -MD
-TGT_CPPFLAGS	+= -Wall -Wundef
-TGT_CPPFLAGS	+= $(DEFS)
-
-###############################################################################
-# Linker flags
-
-TGT_LDFLAGS		+= --static -nostartfiles
-TGT_LDFLAGS		+= -T$(LDSCRIPT)
-TGT_LDFLAGS		+= $(ARCH_FLAGS) $(DEBUG)
-TGT_LDFLAGS		+= -Wl,-Map=$(*).map -Wl,--cref
-TGT_LDFLAGS		+= -Wl,--gc-sections
-ifeq ($(V),99)
-TGT_LDFLAGS		+= -Wl,--print-gc-sections
-endif
-
-###############################################################################
-# Used libraries
-
-LDLIBS		+= -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
-
-###############################################################################
-###############################################################################
-###############################################################################
-
-.SUFFIXES: .elf .bin .hex .srec .list .map .images
-.SECONDEXPANSION:
-.SECONDARY:
-
-all: elf bin
-
-elf: $(BINARY).elf
-bin: $(BINARY).bin
-hex: $(BINARY).hex
-srec: $(BINARY).srec
-list: $(BINARY).list
-GENERATED_BINARIES=$(BINARY).elf $(BINARY).bin $(BINARY).hex $(BINARY).srec $(BINARY).list $(BINARY).map
-
-images: $(BINARY).images
-flash: $(BINARY).flash
-
-$(OPENCM3_DIR)/lib/lib$(LIBNAME).a:
-ifeq (,$(wildcard $@))
-	$(warning $(LIBNAME).a not found, attempting to rebuild in $(OPENCM3_DIR))
-	$(MAKE) -C $(OPENCM3_DIR)
-endif
-
-# Define a helper macro for debugging make errors online
-# you can type "make print-OPENCM3_DIR" and it will show you
-# how that ended up being resolved by all of the included
-# makefiles.
-print-%:
-	@echo $*=$($*)
-
-%.images: %.bin %.hex %.srec %.list %.map
-	@#printf "*** $* images generated ***\n"
-
-%.bin: %.elf
-	@#printf "  OBJCOPY $(*).bin\n"
-	$(Q)$(OBJCOPY) -Obinary $(*).elf $(*).bin
-
-%.hex: %.elf
-	@#printf "  OBJCOPY $(*).hex\n"
-	$(Q)$(OBJCOPY) -Oihex $(*).elf $(*).hex
-
-%.srec: %.elf
-	@#printf "  OBJCOPY $(*).srec\n"
-	$(Q)$(OBJCOPY) -Osrec $(*).elf $(*).srec
-
-%.list: %.elf
-	@#printf "  OBJDUMP $(*).list\n"
-	$(Q)$(OBJDUMP) -S $(*).elf > $(*).list
-
-%.elf %.map: $(OBJS) $(LDSCRIPT) $(OPENCM3_DIR)/lib/lib$(LIBNAME).a Makefile
-	@#printf "  LD      $(*).elf\n"
-	$(Q)$(LD) $(TGT_LDFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $(*).elf
-
-%.o: %.c
-	@#printf "  CC      $(*).c\n"
-	$(Q)$(CC) $(TGT_CFLAGS) $(CFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $(*).o -c $(*).c
-
-%.o: %.S
-	@#printf "  CC      $(*).S\n"
-	$(Q)$(CC) $(TGT_CFLAGS) $(CFLAGS) -o $(*).o -c $(*).S
-
-%.o: %.cxx
-	@#printf "  CXX     $(*).cxx\n"
-	$(Q)$(CXX) $(TGT_CXXFLAGS) $(CXXFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $(*).o -c $(*).cxx
-
-%.o: %.cpp
-	@#printf "  CXX     $(*).cpp\n"
-	$(Q)$(CXX) $(TGT_CXXFLAGS) $(CXXFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $(*).o -c $(*).cpp
+# Create object files for assembly source files
+$(OBJ_DIR)/%.o: %.s
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	@#printf "  CLEAN\n"
-	$(Q)$(RM) $(GENERATED_BINARIES) generated.* $(OBJS) $(OBJS:%.o=%.d)
+	rm -f $(OBJ_DIR)/*.o $(BUILD_DIR)/*.elf $(BUILD_DIR)/*.bin $(BUILD_DIR)/*.hex
 
+# Flash
+flash: $(BUILD_DIR)/$(PROJECT).bin
+	sudo $(ST_FLASH) write $(BUILD_DIR)/$(PROJECT).bin ${FL_ADDR}
 
-.PHONY: images clean elf bin hex srec list
-
--include $(OBJS:.o=.d)
+.PHONY: build clean flash
