@@ -3,8 +3,16 @@
 #include "timer.h"
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/cm3/vector.h>
+#include <libopencm3/cm3/scb.h>
+#include "common_defines.h"
 #define LED_PORT (GPIOC)
 #define LED_PIN (GPIO13)
+#define BOOTLOADER_SIZE (0x8000u)
+
+static inline void vector_setup(void)
+{
+    // SCB_VTOR = BOOTLOADER_SIZE;
+}
 
 volatile uint64_t ticks = 0;
 void sys_tick_handler(void)
@@ -39,6 +47,7 @@ static inline void systick_setup(void)
 }
 int main(void)
 {
+    vector_setup();
     rcc_setup();
     gpio_setup();
     systick_setup();

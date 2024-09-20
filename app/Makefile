@@ -23,7 +23,7 @@ ARCH_FLAGS	= -mthumb -mcpu=cortex-m4
 ###############################################################################
 # Linkerscript
 
-LDSCRIPT = ../linkerscript.ld
+LDSCRIPT = linkerscript.ld
 LDLIBS		+= -l$(LIBNAME)
 LDFLAGS		+= -L$(OPENCM3_DIR)/lib
 
@@ -55,8 +55,9 @@ CSTD		?= -std=c99
 ###############################################################################
 # Source files
 
-SRCS		= $(wildcard $(SRC_DIR)/*.c)
-OBJS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(wildcard $(SRC_DIR)/*.c))
+SRCS		= $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/*.S)
+OBJS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(wildcard $(SRC_DIR)/*.c)) \
+       $(patsubst $(SRC_DIR)/%.S, $(OBJ_DIR)/%.o, $(wildcard $(SRC_DIR)/*.S))
 
 ###############################################################################
 # C flags
@@ -125,10 +126,10 @@ $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf
 $(BUILD_DIR)/%.elf: $(OBJS) $(LDSCRIPT) $(OPENCM3_DIR)/lib/lib$(LIBNAME).a | $(BUILD_DIR)
 	$(Q)$(LD) $(TGT_LDFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $@
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c| $(OBJ_DIR) 
+	$(Q)$(CC) $(TGT_CFLAGS) $(CFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $@ -c $< 
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.S | $(OBJ_DIR)
 	$(Q)$(CC) $(TGT_CFLAGS) $(CFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $@ -c $<
-
-
 
 flash: $(BUILD_DIR)/$(BINARY).bin
 	sudo $(ST_FLASH) write $< ${FL_ADDR}
