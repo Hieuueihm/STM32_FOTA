@@ -36,8 +36,7 @@ ENTRY(reset_handler)
 SECTIONS
 {
 	.text : {
-		*(.bootloader_section)
-
+		KEEP(*(.bootloader_section))
 		*(.vectors)	/* Vector table */
 		. = ALIGN(16);
 

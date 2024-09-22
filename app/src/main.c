@@ -5,13 +5,15 @@
 #include <libopencm3/cm3/vector.h>
 #include <libopencm3/cm3/scb.h>
 #include "common_defines.h"
+#include "uart.h"
+#include <string.h>
 #define LED_PORT (GPIOC)
 #define LED_PIN (GPIO13)
-#define BOOTLOADER_SIZE (0x8000u)
+#define BOOTLOADER_SIZE (0x8000U)
 
 static inline void vector_setup(void)
 {
-    // SCB_VTOR = BOOTLOADER_SIZE;
+    SCB_VTOR = BOOTLOADER_SIZE; // vector table
 }
 
 volatile uint64_t ticks = 0;
@@ -25,12 +27,18 @@ static inline uint64_t get_ticks(void)
 }
 static inline void rcc_setup(void)
 {
-    rcc_clock_setup_pll(&rcc_hsi_configs[RCC_CLOCK_HSI_24MHZ]);
+    rcc_clock_setup_pll(&rcc_hsi_configs[RCC_CLOCK_HSI_64MHZ]);
 }
 static inline void gpio_setup(void)
 {
     rcc_periph_clock_enable(RCC_GPIOC);
-    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_10_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
+    rcc_periph_clock_enable(RCC_GPIOB);
+
+    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
+
+    AFIO_MAPR |= AFIO_MAPR_USART1_REMAP;
+    gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
+                  GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART1_RE_TX);
 }
 static inline void delay_cycles(uint32_t cycle)
 {
@@ -47,10 +55,12 @@ static inline void systick_setup(void)
 }
 int main(void)
 {
+
     vector_setup();
     rcc_setup();
     gpio_setup();
     systick_setup();
+    uart_setup();
     //   timer_setup();
     //     float duty_cycle = 0.0f;
     //       timer_pwm_set_duty_cycle(duty_cycle);
@@ -58,10 +68,12 @@ int main(void)
     while (1)
     {
 
-        delay_cycles(1000000);
+        delay_cycles(500000);
         if (get_ticks() - start_time >= 1000)
         {
             gpio_toggle(LED_PORT, LED_PIN);
+
+            uart_write((uint8_t *)"xam", strlen("xam"));
 
             start_time = get_ticks();
         }
